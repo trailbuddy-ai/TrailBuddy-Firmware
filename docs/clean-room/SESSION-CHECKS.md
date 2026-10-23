@@ -6,6 +6,7 @@ If any check fails, stop and tell the product owner. Do not continue.
 1. The working directory is ~/Documents/TrailBuddy-Firmware.
 2. CLAUDE.md is among the loaded instruction files.
 3. These five files exist: CLAUDE.md, docs/clean-room/POLICY.md,
-   docs/clean-room/REQUIREMENTS.md, docs/SPEC-v0.3.md and OPEN-QUESTIONS.md.
-   POLICY.md and REQUIREMENTS.md both say version 0.3.
-4. docs/SPEC-v0.2.md does not exist.
+   docs/clean-room/REQUIREMENTS.md, docs/SPEC-v0.4.md and OPEN-QUESTIONS.md.
+   POLICY.md and REQUIREMENTS.md both say version 0.4, and the first line
+   of docs/SPEC-v0.4.md says Draft v0.4.
+4. docs/SPEC-v0.2.md and docs/SPEC-v0.3.md do not exist.

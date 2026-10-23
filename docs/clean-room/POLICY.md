@@ -1,6 +1,8 @@
 # Trail Buddy radio: clean-room policy
 
-Version 0.3 · 22 October 2026 · Matches message spec Draft v0.3 (`docs/SPEC-v0.3.md`) and `REQUIREMENTS.md` v0.3. Section numbers are kept from earlier versions; Section 9 (product requirements) is in `REQUIREMENTS.md`.
+Version 0.4 · 23 October 2026 · Issued together with message spec Draft v0.4 (`docs/SPEC-v0.4.md`) and `REQUIREMENTS.md` v0.4. Section numbers are kept from earlier versions; Section 9 (product requirements) is in `REQUIREMENTS.md`.
+
+**Which document wins.** REQUIREMENTS says what the product must do, POLICY says how the clean team works, and the SPEC says exactly how the radio behaves. If they disagree, none of them wins: write the conflict in OPEN-QUESTIONS.md and build nothing that depends on it until the spec team answers. Until then, for anything affecting SOS, the reading that is safer for the rider applies.
 
 This document is written for the implementation team. It deliberately does not name or describe any other project.
 
@@ -12,17 +14,17 @@ Firmware for the Trail Buddy radio. A group of off-road riders each carry a phon
 
 | Board | Notes |
 | --- | --- |
-| Heltec Mesh Node T114 V2 | V2 only; V1 is excluded |
-| Elecrow ThinkNode M1 | E-paper screen, several buttons |
-| RAKwireless RAK4631 (WisBlock) | Has a board definition in Zephyr |
-| RAKwireless WisMesh Pocket V3 | IP67 waterproof; RAK19026 baseboard; GPS; notification buzzer |
+| RAKwireless RAK19026 VC base board with RAK4631 core | **Version 1, lead board.** Reset button, one user button (SW1), two user LEDs, battery disconnection switch, integrated GNSS. Zephyr has a RAK4631 board definition. |
+| Heltec Mesh Node T114 V2 | **Version 1.** V2 only; V1 is excluded. One user button; GPS module fitted on every Trail Buddy unit. Zephyr has a board definition. |
+| Elecrow ThinkNode M1 | **Version 1.** Function, page and reset buttons; power switch; GPS switch; status LED; buzzer; e-paper screen; integrated GNSS. |
+| RAKwireless WisMesh Pocket V3 | IP67 waterproof; RAK19026 baseboard; GPS; notification buzzer. Added when it ships. |
 
-- All four use a Nordic nRF52840 microcontroller (Bluetooth 5.0) and a Semtech SX1262 LoRa radio.
+- All of them use a Nordic nRF52840 microcontroller (Bluetooth 5.0) and a Semtech SX1262 LoRa radio.
 - Region: United States, 902–928 MHz.
-- One firmware serves every board, with a separate board profile for each: pins, GNSS, display, buttons, battery measurement and buzzer.
-- Version 1 is built and tested on the lead board first: the **RAKwireless WisMesh Pocket V3**. The others are added only after the core tests pass on it, each with a written hardware profile in `docs/hardware/`.
-- Zephyr's RAK4631 board definition may be used as the starting point for the lead board. It is part of the open-source Zephyr project, not another mesh project's board file.
-- Version 1 uses the buzzer (new SOS received) and the power button (pairing window). Screens are not used in version 1.
+- One firmware serves every board, with a separate board profile for each: pins, GNSS, user button, status light and battery measurement.
+- Version 1 runs on three boards: the **RAK19026 VC base board with the RAK4631 core** (lead board), the **Heltec T114 V2** and the **Elecrow ThinkNode M1**. Each build step is done on the lead board first; the radio bring-up and the hardware tests are run on all three (Sections 17, 18 and 20). Each has a written hardware profile in `docs/hardware/`. The Pocket V3 is added when it ships.
+- Zephyr's RAK4631 and Heltec T114 V2 board definitions may be used as starting points. They are part of the open-source Zephyr project, not another mesh project's board files. The ThinkNode M1's definition is written by the clean team from Elecrow's documents.
+- Version 1 uses each board's user button, GNSS and one status light, as mapped in spec Section 9. The status light shows power-on, normal running, update reboot and factory reset only. Buzzers and screens are not used in version 1. SOS alerts are shown by the app.
 - Board profiles come only from the manufacturer: datasheets, schematics and the manufacturer's own board support. Never from any other mesh project's board files.
 - All board-specific GPIO, SPI, interrupt, power and radio-register logic stays in the board support package (BSP) and radio HAL. Mesh and application code never contains it.
 
@@ -33,10 +35,10 @@ Firmware for the Trail Buddy radio. A group of off-road riders each carry a phon
 | Phone link (BLE) | Commands, events, settings with read-back, version check, diagnostics. |
 | Trail Buddy protocol | Message types, serialization, identity, addressing, acknowledgements, encryption envelope. |
 | Mesh | Relay, duplicate suppression, hop limit, rebroadcast delay, queues and priority (SOS first). |
-| Channel access | Channel activity detection before transmit, randomized backoff, airtime and duty-cycle limits, receive/transmit state machine. |
+| Channel access | Channel activity detection before every transmission, randomized backoff (spec 4.7), channel-busy measurement and the 30% airtime budget with its slow-down steps (spec 6.10), receive/transmit state machine. Version 1 serves the United States only, where no duty-cycle limit applies. |
 | Settings and storage | Persistent settings, position history for Fill on Return, safe defaults. |
 | Radio HAL | SX1262: frequency, spreading factor, bandwidth, coding rate, power, receive, transmit, channel activity detection. |
-| BSP | nRF52840, SPI, GPIO, interrupts, timers, flash, power, GNSS, display, buttons, buzzer, per board profile. |
+| BSP | nRF52840, SPI, GPIO, interrupts, timers, flash, power, GNSS, user button, status light, per board profile. |
 
 ## 11. Packets and messages
 
@@ -48,16 +50,16 @@ The spec team designs the formats fresh; nothing is inherited from any existing 
 
 ## 12. Security
 
-These are decided; the spec gives the detail (spec 4.3 to 4.6 and 7.2):
+These are decided for building; the spec gives the detail (spec 4.3 to 4.8 and 7.2). Only the independent security review before freeze can change them, and any change it makes comes as a new spec version.
 
 - ride messages use AES-128-CCM with an 8-byte authentication tag; keys and tags are derived from the ride key with HKDF-SHA256
 - a per-ride key generated on the phone and shared in the ride QR code
 - a frame counter that never repeats, even across power loss, and a replay window
 - presence frames carry no ride key, no names and only a rotating anonymous ID; fake presence is limited as in spec 6.6
 - the phone link is paired and encrypted before any message except HELLO and WELCOME
-- firmware images are signed; the signing key never enters the repository
+- firmware images are signed with Ed25519 (spec 7.4, Updates); the signing key never enters the repository
 - an independent review of the design before the spec is frozen
-- established, licensed crypto libraries only; no home-made primitives
+- established, licensed crypto libraries only; no home-made primitives. The product owner confirms, before build step 2, that the chosen library supports AES-128-CCM, HKDF-SHA256 and Ed25519.
 
 Robustness:
 
@@ -88,14 +90,14 @@ The app never depends on routing tables, radio registers, queue internals or boa
 | Allowed? | Source | Examples |
 | --- | --- | --- |
 | Yes | The clean repository | `docs/`, `spec/`, tests, answered questions |
-| Yes | Hardware and vendor documentation | Nordic nRF52840 product specification; nRF Connect SDK and Zephyr documentation, including Zephyr's RAK4631 board definition; Semtech SX1262 datasheet and application notes; Heltec T114 V2 schematic; Elecrow ThinkNode M1 documentation; RAKwireless RAK4631, RAK4630 and RAK19026 documentation; GNSS module manuals |
+| Yes | Hardware and vendor documentation | Nordic nRF52840 product specification; nRF Connect SDK and Zephyr documentation, including Zephyr's RAK4631 and Heltec T114 V2 board definitions; Semtech SX1262 datasheet and application notes; Heltec T114 V2 schematic; Elecrow ThinkNode M1 documentation; RAKwireless RAK4631, RAK4630 and RAK19026 documentation; GNSS module manuals |
 | Yes | Approved library documentation | RadioLib, nanopb, the UF2 bootloader |
-| Yes | Standards and regulations | Bluetooth Core Specification, FCC Part 15 |
+| Yes | Standards and regulations | Bluetooth Core Specification, FCC Part 15, and the standards approved in spec Section 13: RFC 5869, FIPS 180-4, FIPS 197, NIST SP 800-38C, RFC 3610, RFC 8032, RFC 4648, RFC 3629, Google's proto3 language specification, ITU-R TF.460, IS-GPS-200, Microsoft's UF2 format and, for the app team only, ISO/IEC 18004. Read only the copies in `docs/standards/`. |
 | Yes | Published literature | Papers on flooding and broadcast suppression, cited in DECISIONS.md |
 | No | Other mesh messaging projects | Their code, documents, board files, protocol definitions, issue trackers, forums and blog posts, however obtained, including through web search or an AI chat |
 | No | Anything outside the clean repository not on this list | Unless the spec team approves it and it is logged in SOURCE-REGISTER.md first |
 
-Vendor documents are added to the repository by the product owner, so sessions don't need web access.
+Vendor documents and standards are added to the repository by the product owner, and each is logged in SOURCE-REGISTER.md, so sessions don't need web access.
 
 ## 15. Libraries
 
@@ -143,7 +145,7 @@ Vendor documents are added to the repository by the product owner, so sessions d
 
 Hardest first, so failures show up early. Unit tests come before hardware for every step. All steps run on the lead board first.
 
-1. **Radio bring-up:** raw send and receive between two boards.
+1. **Radio bring-up:** raw send and receive between two lead boards, then between each pair of the three version 1 boards.
 2. **Frame format and crypto:** all test vectors in spec Section 11 pass. Conformance tests run in CI from here on.
 3. **BLE phone link** with a minimal test app.
 4. **GPS and position** broadcast by tier.
@@ -154,7 +156,8 @@ Hardest first, so failures show up early. Unit tests come before hardware for ev
 9. **Fill on Return.**
 10. **Settings persistence** with read-back and power-loss safety.
 11. **Firmware updates:** signed images and rollback.
-12. **Further boards:** one board profile at a time, re-running the hardware tests on each.
+12. **T114 V2 and ThinkNode M1:** complete each board profile (user button, status light, GNSS, battery) and re-run the hardware-in-the-loop and field tests on each.
+13. **WisMesh Pocket V3,** when it ships.
 
 ## 18. Testing
 
@@ -164,8 +167,8 @@ Hardest first, so failures show up early. Unit tests come before hardware for ev
 | Conformance | Every test vector, encrypted and decrypted | All vectors pass on every change |
 | Protocol | Ride broadcast, unicast, presence, unknown sender, malformed and duplicate packets, replays | Expected state transitions; malformed input rejected |
 | Mesh simulation | 1–30 virtual nodes; loss, duplicates, congestion, partitions, rejoining; channel busy per tier | No relaying beyond the hop limit; SOS delivered first under load; presence never delays SOS |
-| Radio / channel access | Channel busy and clear, collisions, backoff, receive/transmit switching | No deadlocks; duty-cycle limits held |
-| Hardware-in-the-loop | 3–5 boards: cold boot, sleep/wake, power loss during settings write, failed update, sustained traffic | Settings intact; rollback works; stable operation |
+| Radio / channel access | Channel busy and clear, collisions, listen before talking, backoff, receive/transmit switching, slow-down steps | No deadlocks; normal traffic held at or below 30% busy; SOS never waits for a clear channel |
+| Hardware-in-the-loop | 3–5 boards, including at least one of each version 1 board: cold boot, sleep/wake, power loss during settings write, failed update, sustained traffic | Settings intact; rollback works; stable operation |
 | Field | Range, Fill on Return timing, SOS, approaching-rider warnings, full-day battery, a 4-rider ride at each tier | Meets NFR-001 targets; with 4 riders at 10 s updates, the channel stays usable for an SOS |
 | Phone | Connect, version check, send, receive, tracking, nearby riders, reconnect, read-back | App sees only defined protocol events |
 
@@ -177,6 +180,7 @@ Hardest first, so failures show up early. Unit tests come before hardware for ev
 | `docs/` | Message spec drafts, as handed over |
 | `docs/clean-room/` | POLICY.md, REQUIREMENTS.md |
 | `docs/hardware/` | One hardware profile per board, with datasheet references |
+| `docs/standards/` | Official copies of the approved standards (spec Section 13), added by the product owner |
 | `spec/` | Frozen protocol spec (versioned) |
 | `spec/vectors/` | Test vectors: the spec's own (spec Section 11) and the recorded phone-link vectors |
 | `firmware/bsp/`, `radio/`, `channel/`, `mesh/`, `protocol/`, `storage/`, `ble/`, `app/` | Firmware by layer (Section 10) |
@@ -195,9 +199,10 @@ Hardest first, so failures show up early. Unit tests come before hardware for ev
 
 ## 20. Definition of done
 
-- Builds reproducibly from a clean checkout; only approved board targets are enabled.
+- Builds reproducibly from a clean checkout for all three version 1 boards; only approved board targets are enabled.
+- Hardware-in-the-loop tests pass on the RAK19026 VC, the T114 V2 and the ThinkNode M1, and a mixed ride using all three works.
 - All test vectors and conformance tests pass.
-- SOS goes first and is never dropped, under simulated and bench load.
+- SOS goes first, and an SOS or "I'm OK" is never dropped, under simulated and bench load. An active SOS resumes after a reboot.
 - Duplicates are suppressed and the hop limit stops flooding.
 - Presence is sent and received, and never delays an SOS.
 - DIAG-001 counters are present in the release build.
@@ -207,3 +212,15 @@ Hardest first, so failures show up early. Unit tests come before hardware for ev
 - Every requirement has a passing test.
 - Records in Section 19 are complete, and a clean reviewer has approved the code.
 - Regulatory and release sign-off from the product owner before any release.
+
+## Changes from v0.3
+
+| Section | Change |
+| --- | --- |
+| Header | "Which document wins" rule added. |
+| 8 | Version 1 boards are the RAK19026 VC base board with the RAK4631 core (lead), the Heltec T114 V2 and the Elecrow ThinkNode M1; user button mapped per board in spec 9; one status light for power and mode; no buzzer or screen in version 1. |
+| 17, 18, 20 | Bring-up, hardware tests and done-criteria cover all three boards. |
+| 10, 18 | Channel access: listen before talking and the 30% airtime budget; no duty-cycle limit in the United States. |
+| 12 | Decided for building; only the security review can change it. Ed25519 named. Crypto library to be confirmed before build step 2. |
+| 14, 19 | Approved standards listed; copies kept in `docs/standards/`. |
+| 20 | SOS done-criterion matches SOS-002 and SOS-003. |
