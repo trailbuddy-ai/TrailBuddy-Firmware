@@ -28,6 +28,15 @@
   5. Log each approval in SOURCE-REGISTER.md.
   6. Ask the security reviewer whether the Nordic/Zephyr crypto library supports all the required algorithms.
 
+### Create docs/standards/ and add approved standards documents (Q63)
+- Owner: David (policy owner)
+- Added: 22 October 2026
+- Source: OPEN-QUESTIONS.md Q63; spec v0.4 Section 13; POLICY v0.4 §14
+- Steps:
+  1. Create `docs/standards/`.
+  2. Add the official copy of each standard listed in spec Section 13.
+  3. Log each one in SOURCE-REGISTER.md (which doesn't exist yet; see the Q63 item above).
+
 ## On hold
 - Pocket V3 board profile, buzzer and power button — waiting for the Pocket V3 to ship and its specs to arrive.
 
