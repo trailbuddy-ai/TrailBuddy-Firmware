@@ -1,6 +1,6 @@
 # Trail Buddy radio: product requirements
 
-Version 0.2 · 22 October 2026 · Source: Clean-Room Firmware Development Specification, Part 2 Section 9, plus the Nearby riders requirements from the message spec (Draft v0.2).
+Version 0.3 · 22 October 2026 · Matches message spec Draft v0.3 (`docs/SPEC-v0.3.md`). Where a requirement points to a spec section, that section holds the detail.
 
 Every requirement has an ID. Every protocol decision in the spec cites the requirement it serves, a rationale and a test.
 
@@ -10,14 +10,14 @@ Every requirement has an ID. Every protocol decision in the spec cites the requi
 | --- | --- |
 | POS-001 | Broadcast own position on the interval set by the ride's group tier. |
 | POS-002 | Every position carries its GPS fix time. Receivers judge freshness by the fix time, never by when the packet arrived. |
-| POS-003 | GPS duty cycle follows the group tier, to save battery. |
+| POS-003 | GPS duty cycle follows the rider's movement and presence setting, to save battery (spec 6.1). |
 
 ## Messages
 
 | ID | Requirement |
 | --- | --- |
-| MSG-001 | Group text messages to everyone in the ride. |
-| MSG-002 | Delivery acknowledgement that names the message it confirms. |
+| MSG-001 | Group text messages to everyone in the ride, up to 150 bytes. Text to a single rider is not in version 1. |
+| MSG-002 | Delivery acknowledgement that names the message it confirms. The sender sees a count, for example "Delivered to 3 of 4" (spec 6.3). |
 | MSG-003 | Rider name and short ID announced to the ride, including to radios that join later. |
 
 ## SOS
@@ -27,21 +27,22 @@ Every requirement has an ID. Every protocol decision in the spec cites the requi
 | SOS-001 | SOS carries location and send time. |
 | SOS-002 | SOS goes ahead of every other queued transmission and is never dropped when queues are full. |
 | SOS-003 | SOS is sent twice, 10 seconds apart, then repeated every 5 minutes until "I'm OK" or End Ride. |
-| SOS-004 | "Copy that" replies reach the sender and the group; "I'm OK" cancels the SOS for everyone. |
+| SOS-004 | "Copy that" replies reach the sender and the group; "I'm OK" cancels the SOS for everyone. Only the rider who raised the SOS can cancel it. |
 
 ## Fill on Return
 
 | ID | Requirement |
 | --- | --- |
-| FILL-001 | After a rider rejoins, missing positions are requested, answered from stored history, retried, and held back when the channel is busy. The spec team restates the full five rules in the spec. |
+| FILL-001 | After a rider rejoins, missing positions are requested, answered from stored history, retried, and held back when the channel is busy. The five rules are in spec 6.5. The returning rider's own radio answers. |
 
 ## Ride
 
 | ID | Requirement |
 | --- | --- |
 | RIDE-001 | A ride is a private group with its own key, created on a phone and shared by QR code. |
-| RIDE-002 | Four group tiers, each setting a hop limit and a position interval. |
-| RIDE-003 | End Ride returns the radio to a known default state. |
+| RIDE-002 | Four group tiers, each setting a hop limit and a position interval: 2–4 riders, 3 hops, 10 s; 5–9 riders, 4 hops, 45 s; 10–19 riders, 5 hops, 120 s; 20–30 riders, 7 hops, 90 s (spec 2.5). |
+| RIDE-003 | End Ride returns the radio to a known default state (spec 6.7). |
+| RIDE-004 | At most 30 riders per ride, and one active ride per radio. |
 
 ## Mesh
 
@@ -69,7 +70,7 @@ Goal: help riders avoid trail collisions by seeing any Trail Buddy rider nearby,
 | NEAR-003 | Presence is sent often while moving and less often when stopped. The intervals are set by the spec team against the airtime budget. |
 | NEAR-004 | The radio passes every presence signal it hears to the app. |
 | NEAR-005 | The app warns the rider when another rider is approaching, using sound and vibration as well as the screen. Each rider's app decides this independently, so both riders are warned. |
-| NEAR-006 | The rider can turn presence off, for example when parked. Whether it is on by default is a product decision. |
+| NEAR-006 | The rider can turn presence off, for example when parked. Presence is on by default, always on during the rider's own SOS, and on again after End Ride. |
 | NEAR-007 | Presence never delays an SOS. |
 | NEAR-008 | An empty "Nearby" view must never be presented as a clear trail. The app states that it shows Trail Buddy riders only. |
 
@@ -86,5 +87,11 @@ Goal: help riders avoid trail collisions by seeing any Trail Buddy rider nearby,
 | ID | Requirement |
 | --- | --- |
 | DFU-001 | Firmware updates use signed images and roll back if an update fails. |
-| REG-001 | Transmit power, dwell time and duty cycle stay within the approved channel plan. |
-| NFR-001 | Targets for range, battery hours per riding day, maximum packet size and return-to-filled-track time, set by the product owner. |
+| REG-001 | Transmit power, antenna gain and bandwidth stay within the channel plan in spec 2.1, as confirmed by the compliance lab. |
+| NFR-001 | At least 12 hours on battery per riding day; a filled track within 60 s of a rider's return; range at least as good as the August field test; frames of at most 176 bytes; normal traffic keeps the channel at most 30% busy. |
+
+## Diagnostics
+
+| ID | Requirement |
+| --- | --- |
+| DIAG-001 | The radio keeps diagnostic counters (spec 7.4) in release firmware, for field testing. Detailed logging is not included in release builds. |
